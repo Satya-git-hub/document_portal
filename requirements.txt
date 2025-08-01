@@ -1,0 +1,19 @@
+langchain
+python-dotenv
+ipykernel
+langchain_groq
+langchain_openai
+langchain_community
+pypdf
+faiss-cpu
+sentence_transformers
+langchain-huggingface
+huggingface_hub
+transformers
+accelerate
+bitsandbytes
+structlog
+PyMuPDF
+langchain_google_genai
+
+-e .
