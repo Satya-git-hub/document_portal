@@ -3,28 +3,64 @@ from pathlib import Path
 from typing import Iterable, List
 from fastapi import UploadFile
 from langchain.schema import Document
-from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader
+from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, TextLoader, UnstructuredPowerPointLoader, UnstructuredMarkdownLoader, UnstructuredExcelLoader, CSVLoader, UnstructuredImageLoader
 from logger import GLOBAL_LOGGER as log
 from exception.custom_exception import DocumentPortalException
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt"}
+from sqlalchemy import create_engine, inspect, text
 
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".ppt", ".pptx", ".md", ".csv", ".xlsx", ".db", ".sqlite"}
+
+def load_sql_database(connection_string: str) -> List[Document]:
+    """
+    Load data from any SQL database using SQLAlchemy.
+    """
+    engine = create_engine(connection_string)
+    inspector = inspect(engine)
+
+    docs: List[Document] = []
+    with engine.connect() as conn:
+        for table_name in inspector.get_table_names():
+            result = conn.execute(text(f"SELECT * FROM {table_name}"))
+            col_names = result.keys()
+            rows = result.fetchall()
+            text_data = f"Table: {table_name}\nColumns: {', '.join(col_names)}\nRows:\n"
+            for row in rows:
+                text_data += f"{row}\n"
+            docs.append(Document(page_content=text_data))
+    return docs
 
 def load_documents(paths: Iterable[Path]) -> List[Document]:
-    """Load docs using appropriate loader based on extension."""
+    """Load docs using appropriate loader based on extension or database URL."""
     docs: List[Document] = []
     try:
         for p in paths:
             ext = p.suffix.lower()
             if ext == ".pdf":
                 loader = PyPDFLoader(str(p))
+                docs.extend(loader.load())
             elif ext == ".docx":
                 loader = Docx2txtLoader(str(p))
+                docs.extend(loader.load())
             elif ext == ".txt":
                 loader = TextLoader(str(p), encoding="utf-8")
+                docs.extend(loader.load())
+            elif ext in [".ppt", ".pptx"]:
+                loader = UnstructuredPowerPointLoader(str(p))
+                docs.extend(loader.load())
+            elif ext == ".md":
+                loader = UnstructuredMarkdownLoader(str(p))
+                docs.extend(loader.load())
+            elif ext == ".csv":
+                loader = CSVLoader(file_path=str(p), encoding="utf-8")
+                docs.extend(loader.load())
+            elif ext == ".xlsx":
+                loader = UnstructuredExcelLoader(str(p))
+                docs.extend(loader.load())
+            elif ext in [".db", ".sqlite"]:
+                connection_url = f"sqlite:///{p}"
+                docs.extend(load_sql_database(connection_url))
             else:
                 log.warning("Unsupported extension skipped", path=str(p))
-                continue
-            docs.extend(loader.load())
         log.info("Documents loaded", count=len(docs))
         return docs
     except Exception as e:
