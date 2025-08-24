@@ -1,14 +1,14 @@
 {
   "family": "documentportaltd",
   "networkMode": "awsvpc",
-  "executionRoleArn": "arn:aws:iam::685057748560:role/ecsTaskExecutionRole",
+  "executionRoleArn": "arn:aws:iam::621120074021:role/ecsTaskExecutionRole",
   "requiresCompatibilities": ["FARGATE"],
   "cpu": "1024",
   "memory": "8192",
   "containerDefinitions": [
     {
       "name": "document-portal-container",
-      "image": "685057748560.dkr.ecr.us-east-1.amazonaws.com/documentportal:latest",
+      "image": "621120074021.dkr.ecr.us-east-1.amazonaws.com/document_portal_repo",
       "cpu": 1024,
       "essential": true,
       "portMappings": [
@@ -22,27 +22,16 @@
       ],
       "environment": [
         {
-          "name": "LANGCHAIN_PROJECT",
-          "value": "DOCUMENT PORTAL"
+          "name": "ENV",
+          "value": "production"
         }
       ],
       "secrets": [
         {
-          "name": "GROQ_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:685057748560:secret:GROQ_API_KEY"
-        },
-        {
-          "name": "HF_TOKEN",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:685057748560:secret:HF_TOKEN"
-        },
-        {
-          "name": "GOOGLE_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:685057748560:secret:GOOGLE_API_KEY"
-        },
-        {
-          "name": "LANGCHAIN_API_KEY",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:685057748560:secret:LANGCHAIN_API_KEY"
+          "name": "API_KEYS",
+          "valueFrom": "arn:aws:secretsmanager:us-east-1:621120074021:secret:api_keys-gHemtg"
         }
+        
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
@@ -50,9 +39,7 @@
           "awslogs-group": "/ecs/documentportaltd",
           "awslogs-region": "us-east-1",
           "awslogs-stream-prefix": "ecs",
-          "awslogs-create-group": "false",
-          "mode": "non-blocking",
-          "max-buffer-size": "25m"
+          "awslogs-create-group": "true"
         }
       }
     }
