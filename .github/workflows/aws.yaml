@@ -119,41 +119,38 @@ jobs:
           SERVICE_NAME="${{ env.ECS_SERVICE }}"
           PORT="${{ env.APP_PORT }}"
 
-          echo "Fetching running task ARN..."
-          TASK_ARN=$(aws ecs list-tasks \
-            --cluster $CLUSTER_NAME \
-            --service-name $SERVICE_NAME \
-            --desired-status RUNNING \
-            --query 'taskArns[0]' \
-            --output text)
+          echo "Waiting for ECS task to be in RUNNING state..."
+          for i in {1..10}; do
+            TASK_ARN=$(aws ecs list-tasks \
+              --cluster "$CLUSTER_NAME" \
+              --service-name "$SERVICE_NAME" \
+              --desired-status RUNNING \
+              --query 'taskArns[0]' \
+              --output text)
 
-          if [[ "$TASK_ARN" == "None" || -z "$TASK_ARN" ]]; then
-            echo "No running tasks found for service $SERVICE_NAME in cluster $CLUSTER_NAME"
+            if [ "$TASK_ARN" != "None" ]; then
+              echo "Found running task: $TASK_ARN"
+              break
+            fi
+            echo "No running task yet. Retrying in 15s..."
+            sleep 15
+          done
+
+          if [ "$TASK_ARN" == "None" ] || [ -z "$TASK_ARN" ]; then
+            echo "ERROR: No running ECS task found after retries."
             exit 1
           fi
 
-          echo "Task ARN: $TASK_ARN"
-
           ENI_ID=$(aws ecs describe-tasks \
-            --cluster $CLUSTER_NAME \
+            --cluster "$CLUSTER_NAME" \
             --tasks "$TASK_ARN" \
             --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
             --output text)
-
-          if [[ -z "$ENI_ID" ]]; then
-            echo "Could not fetch ENI ID from ECS task"
-            exit 1
-          fi
 
           PUBLIC_IP=$(aws ec2 describe-network-interfaces \
             --network-interface-ids "$ENI_ID" \
             --query 'NetworkInterfaces[0].Association.PublicIp' \
             --output text)
-
-          if [[ -z "$PUBLIC_IP" || "$PUBLIC_IP" == "None" ]]; then
-            echo "No Public IP found. Ensure tasks are assigned public IPs."
-            exit 1
-          fi
 
           echo "ECS_APP_URL=http://${PUBLIC_IP}:${PORT}" >> $GITHUB_ENV
           echo "Public IP: ${PUBLIC_IP}"
@@ -162,18 +159,6 @@ jobs:
 
       - name: Install Dependencies
         run: pip install pytest requests
-
-      - name: Wait until Service is Ready
-        run: |
-          for i in {1..10}; do
-            echo "Checking service health... attempt $i"
-            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${ECS_APP_URL}/health" || true)
-            if [ "$STATUS" == "200" ]; then
-              echo "Service is up!"
-              break
-            fi
-            sleep 10
-          done
 
       - name: Run Smoke Tests
         run: |
