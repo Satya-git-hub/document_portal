@@ -120,7 +120,7 @@ jobs:
           PORT="${{ env.APP_PORT }}"
 
           echo "Waiting for ECS task to be in RUNNING state..."
-          for i in {1..10}; do
+          for i in {1..30}; do
             TASK_ARN=$(aws ecs list-tasks \
               --cluster "$CLUSTER_NAME" \
               --service-name "$SERVICE_NAME" \
