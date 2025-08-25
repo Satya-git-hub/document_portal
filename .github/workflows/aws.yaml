@@ -113,6 +113,8 @@ jobs:
       - name: Fetch ECS Task Public IP
         id: get_ip
         run: |
+          set -euo pipefail
+
           CLUSTER_NAME="${{ env.ECS_CLUSTER }}"
           SERVICE_NAME="${{ env.ECS_SERVICE }}"
           PORT="${{ env.APP_PORT }}"
@@ -125,16 +127,33 @@ jobs:
             --query 'taskArns[0]' \
             --output text)
 
+          if [[ "$TASK_ARN" == "None" || -z "$TASK_ARN" ]]; then
+            echo "No running tasks found for service $SERVICE_NAME in cluster $CLUSTER_NAME"
+            exit 1
+          fi
+
+          echo "Task ARN: $TASK_ARN"
+
           ENI_ID=$(aws ecs describe-tasks \
             --cluster $CLUSTER_NAME \
-            --tasks $TASK_ARN \
+            --tasks "$TASK_ARN" \
             --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
             --output text)
 
+          if [[ -z "$ENI_ID" ]]; then
+            echo "Could not fetch ENI ID from ECS task"
+            exit 1
+          fi
+
           PUBLIC_IP=$(aws ec2 describe-network-interfaces \
-            --network-interface-ids $ENI_ID \
+            --network-interface-ids "$ENI_ID" \
             --query 'NetworkInterfaces[0].Association.PublicIp' \
             --output text)
+
+          if [[ -z "$PUBLIC_IP" || "$PUBLIC_IP" == "None" ]]; then
+            echo "No Public IP found. Ensure tasks are assigned public IPs."
+            exit 1
+          fi
 
           echo "ECS_APP_URL=http://${PUBLIC_IP}:${PORT}" >> $GITHUB_ENV
           echo "Public IP: ${PUBLIC_IP}"
