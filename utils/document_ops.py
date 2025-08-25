@@ -7,8 +7,50 @@ from langchain_community.document_loaders import PyPDFLoader, Docx2txtLoader, Te
 from logger import GLOBAL_LOGGER as log
 from exception.custom_exception import DocumentPortalException
 from sqlalchemy import create_engine, inspect, text
+from langchain_google_genai import ChatGoogleGenerativeAI
+import base64, os
+from bs4 import BeautifulSoup
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".ppt", ".pptx", ".md", ".csv", ".xlsx", ".db", ".sqlite"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".ppt", ".pptx", ".md", ".csv", ".xlsx", ".db", ".sqlite", ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".webp", ".html", ".htm", ".xhtml"}
+
+def extract_html(file_path: str) -> list[Document]:
+    with open(file_path, "r", encoding="utf-8") as f:
+        html = f.read()
+    soup = BeautifulSoup(html, "html.parser")
+    for tag in soup(["script", "style"]):
+        tag.decompose()
+    text = soup.get_text(separator="\n", strip=True)
+    return [Document(page_content=text, metadata={"source": file_path})]
+
+
+def describe_image_ai(image_path: str) -> Document:
+    """
+    Describe the image content using Google's Gemini model via LangChain.
+    """
+    model_name = "gemini-2.0-flash"
+    temperature = 0
+    max_output_tokens = 2048
+
+    client = ChatGoogleGenerativeAI(
+                    model=model_name,
+                    google_api_key=os.getenv("GOOGLE_API_KEY"),
+                    temperature=temperature,
+                    max_output_tokens=max_output_tokens
+                )
+    
+    with open(image_path, "rb") as f:
+        img_base64 = base64.b64encode(f.read()).decode("utf-8")
+
+    response = client.invoke([
+        {
+            "role": "user",
+            "content": [
+                {"type": "text", "text": "Describe this image in detail."},
+                {"type": "image_url", "image_url": f"data:image/jpeg;base64,{img_base64}"}
+            ]
+        }
+    ])
+    return Document(page_content=response.content)
 
 def load_sql_database(connection_string: str) -> List[Document]:
     """
@@ -59,6 +101,10 @@ def load_documents(paths: Iterable[Path]) -> List[Document]:
             elif ext in [".db", ".sqlite"]:
                 connection_url = f"sqlite:///{p}"
                 docs.extend(load_sql_database(connection_url))
+            elif ext in [".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".webp"]:
+                docs.append(describe_image_ai(str(p)))
+            elif ext in [".html", ".htm", ".xhtml"]:
+                docs.extend(extract_html(str(p)))
             else:
                 log.warning("Unsupported extension skipped", path=str(p))
         log.info("Documents loaded", count=len(docs))

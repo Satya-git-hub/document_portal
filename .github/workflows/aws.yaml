@@ -1,3 +1,4 @@
+# .github/workflows/aws.yml
 name: CI/CD to ECS Fargate
 on:
   workflow_run:
@@ -11,6 +12,7 @@ env:
   ECS_CLUSTER: document-portal-cluster
   ECS_TASK_DEFINITION: .github/workflows/task_definition.json
   CONTAINER_NAME: document-portal-container
+  APP_PORT: 8080
 
 permissions:
   id-token: write
@@ -21,8 +23,8 @@ jobs:
     runs-on: ubuntu-latest
     if: ${{github.event.workflow_run.conclusion == 'success' && github.event.workflow_run.head_branch == 'master'}}
     steps:
-      - name: CI passed on main branch
-        run: echo "CI passed on main branch, proceeding to build and deploy."
+      - name: CI passed on master branch
+        run: echo "Unit tests passed. Proceeding with build & deploy."
 
   # -------------------------------
   # 1. Build & Push Docker Image
@@ -94,5 +96,75 @@ jobs:
           service: ${{ env.ECS_SERVICE }}
           cluster: ${{ env.ECS_CLUSTER }}
           wait-for-service-stability: true
-      - name: Done!
-        run: echo "Deployed to ECS Fargate Successfully"
+
+      - run: echo "Deployment to ECS Fargate completed."
+
+  post-deployment-tests:
+    name: Run Post-Deployment Smoke Tests
+    needs: deploy
+    runs-on: ubuntu-latest
+    steps:
+      - uses: aws-actions/configure-aws-credentials@v4
+        with:
+          aws-access-key-id: ${{ secrets.AWS_ACCESS_KEY_ID }}
+          aws-secret-access-key: ${{ secrets.AWS_SECRET_ACCESS_KEY }}
+          aws-region: ${{ env.AWS_REGION }}
+
+      - name: Fetch ECS Task Public IP
+        id: get_ip
+        run: |
+          CLUSTER_NAME="${{ env.ECS_CLUSTER }}"
+          SERVICE_NAME="${{ env.ECS_SERVICE }}"
+          PORT="${{ env.APP_PORT }}"
+
+          echo "Fetching running task ARN..."
+          TASK_ARN=$(aws ecs list-tasks \
+            --cluster $CLUSTER_NAME \
+            --service-name $SERVICE_NAME \
+            --desired-status RUNNING \
+            --query 'taskArns[0]' \
+            --output text)
+
+          ENI_ID=$(aws ecs describe-tasks \
+            --cluster $CLUSTER_NAME \
+            --tasks $TASK_ARN \
+            --query 'tasks[0].attachments[0].details[?name==`networkInterfaceId`].value' \
+            --output text)
+
+          PUBLIC_IP=$(aws ec2 describe-network-interfaces \
+            --network-interface-ids $ENI_ID \
+            --query 'NetworkInterfaces[0].Association.PublicIp' \
+            --output text)
+
+          echo "ECS_APP_URL=http://${PUBLIC_IP}:${PORT}" >> $GITHUB_ENV
+          echo "Public IP: ${PUBLIC_IP}"
+
+      - uses: actions/checkout@v4
+
+      - name: Install Dependencies
+        run: pip install pytest requests
+
+      - name: Wait until Service is Ready
+        run: |
+          for i in {1..10}; do
+            echo "Checking service health... attempt $i"
+            STATUS=$(curl -s -o /dev/null -w "%{http_code}" "${ECS_APP_URL}/health" || true)
+            if [ "$STATUS" == "200" ]; then
+              echo "Service is up!"
+              break
+            fi
+            sleep 10
+          done
+
+      - name: Run Smoke Tests
+        run: |
+          pytest tests/test_post_deployment.py -m smoke -v --maxfail=1 --disable-warnings
+
+      - name: Cleanup on Failure
+        if: failure()
+        run: |
+          echo "Smoke tests failed. Stopping running tasks..."
+          aws ecs update-service \
+            --cluster ${{ env.ECS_CLUSTER }} \
+            --service ${{ env.ECS_SERVICE }} \
+            --desired-count 0

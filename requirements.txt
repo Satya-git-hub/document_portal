@@ -17,5 +17,22 @@ ipykernel==6.30.0
 streamlit==1.47.1
 pytest==8.4.1
 pypdf==5.8.0
-cfn-lint
+cfn-lint==1.39.0
+
+python-pptx==1.0.2
+markdown==3.8.2
+unstructured==0.18.13
+pandas==2.3.1
+openpyxl==3.1.5
+msoffcrypto-tool==5.4.2
+sqlalchemy==2.0.41
+pymysql==1.1.2
+psycopg2==2.9.10
+pdfminer.six==20250506
+pytesseract==0.3.13
+pi-heif==1.1.0
+pillow==11.3.0
+pytest-mock==3.14.1
+httpx==0.28.1
+
 -e .

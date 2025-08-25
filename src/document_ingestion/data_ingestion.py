@@ -17,7 +17,7 @@ from exception.custom_exception import DocumentPortalException
 from utils.file_io import generate_session_id, save_uploaded_files
 from utils.document_ops import load_documents, concat_for_analysis, concat_for_comparison
 
-SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".ppt", ".pptx", ".md", ".csv", ".xlsx", ".db", ".sqlite"}
+SUPPORTED_EXTENSIONS = {".pdf", ".docx", ".txt", ".ppt", ".pptx", ".md", ".csv", ".xlsx", ".db", ".sqlite", ".jpg", ".jpeg", ".png", ".bmp", ".gif", ".tiff", ".webp", ".html", ".htm", ".xhtml"}
 
 # FAISS Manager (load-or-create)
 class FaissManager:

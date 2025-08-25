@@ -29,9 +29,8 @@
       "secrets": [
         {
           "name": "API_KEYS",
-          "valueFrom": "arn:aws:secretsmanager:us-east-1:621120074021:secret:api_keys-gHemtg"
+          "valueFrom": "arn:aws:ssm:us-east-1:621120074021:parameter/document-portal/prod/API_KEYS"
         }
-        
       ],
       "logConfiguration": {
         "logDriver": "awslogs",
