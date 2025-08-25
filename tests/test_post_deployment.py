@@ -23,7 +23,7 @@ def test_healthcheck_endpoint():
     response = requests.get(f"{BASE_URL}/health", timeout=10)
     assert response.status_code == 200
     data = response.json()
-    assert data.get("status") == "healthy"
+    assert data.get("status") == "ok"
 
 
 @pytest.mark.smoke
